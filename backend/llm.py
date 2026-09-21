@@ -43,7 +43,7 @@ class GeminiLLM(LLM):
             api_key=api_key
         )
 
-        max_retries = 3
+        max_retries = 5
 
         for attempt in range(max_retries):
 
@@ -64,19 +64,27 @@ class GeminiLLM(LLM):
             except errors.ServerError as error:
 
                 if attempt == max_retries - 1:
+
                     raise RuntimeError(
-                        "Gemini server is temporarily unavailable. "
+                        "Gemini is temporarily unavailable. "
                         "Please try again later."
                     ) from error
 
                 wait_seconds = 2 ** attempt
-                time.sleep(wait_seconds)
+
+                time.sleep(
+                    wait_seconds
+                )
 
             except errors.ClientError as error:
 
                 error_text = str(error)
 
-                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+                if (
+                    "429" in error_text
+                    or
+                    "RESOURCE_EXHAUSTED" in error_text
+                ):
 
                     raise RuntimeError(
                         "Gemini API quota has been exceeded. "
