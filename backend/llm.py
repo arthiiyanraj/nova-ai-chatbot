@@ -31,7 +31,7 @@ class GeminiLLM(LLM):
 
         model = os.getenv(
             "GEMINI_MODEL",
-            "gemini-3.8-flash",
+            "gemini-3.1-flash-lite",
         )
 
         if not api_key:
@@ -64,23 +64,30 @@ class GeminiLLM(LLM):
             except errors.ServerError as error:
 
                 if attempt == max_retries - 1:
-
                     raise RuntimeError(
-                        "Gemini is temporarily unavailable. "
-                        "Please try again in a moment."
+                        "Gemini server is temporarily unavailable. "
+                        "Please try again later."
                     ) from error
 
                 wait_seconds = 2 ** attempt
-
-                time.sleep(
-                    wait_seconds
-                )
+                time.sleep(wait_seconds)
 
             except errors.ClientError as error:
 
+                error_text = str(error)
+
+                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+
+                    raise RuntimeError(
+                        "Gemini API quota has been exceeded. "
+                        "Please wait for the quota to reset "
+                        "or use a model with available quota."
+                    ) from error
+
                 raise RuntimeError(
                     "Gemini API request failed. "
-                    "Please check your API key and API settings."
+                    "Please check the API key, model, "
+                    "and API settings."
                 ) from error
 
             except Exception as error:
