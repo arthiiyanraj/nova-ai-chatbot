@@ -3,10 +3,6 @@ from backend.web_search import web_search
 from langchain_core.prompts import ChatPromptTemplate
 
 
-# =========================================================
-# WEB SEARCH PROMPT
-# =========================================================
-
 WEB_SYSTEM_PROMPT = """
 You are NOVA, a friendly general-purpose AI assistant.
 
@@ -27,51 +23,43 @@ WEB SEARCH RESULTS:
 """
 
 
-# =========================================================
-# CREATE WEB PROMPT
-# =========================================================
-
 def create_web_prompt():
-
     return ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                WEB_SYSTEM_PROMPT,
-            ),
-            (
-                "human",
-                "{question}",
-            ),
+            ("system", WEB_SYSTEM_PROMPT),
+            ("human", "{question}"),
         ]
     )
 
 
-# =========================================================
-# ASK WEB
-# =========================================================
+def get_response_text(response):
+    """
+    GeminiLLM returns a string.
+    ChatOllama can return an AIMessage.
+    This function supports both.
+    """
 
-def ask_web(
-    question,
-    max_results=5,
-):
+    if isinstance(response, str):
+        return response.strip()
 
-    # -----------------------------------------------------
-    # SEARCH WEB
-    # -----------------------------------------------------
+    if hasattr(response, "content"):
+        return str(response.content).strip()
+
+    return str(response).strip()
+
+
+def ask_web(question, max_results=5):
+
+    # -----------------------------------------
+    # STEP 1: Search the web
+    # -----------------------------------------
 
     results = web_search(
         question,
         max_results=max_results,
     )
 
-
-    # -----------------------------------------------------
-    # NO RESULTS
-    # -----------------------------------------------------
-
     if not results:
-
         return {
             "answer": (
                 "I couldn't find useful information "
@@ -80,13 +68,11 @@ def ask_web(
             "sources": [],
         }
 
-
-    # -----------------------------------------------------
-    # BUILD CONTEXT
-    # -----------------------------------------------------
+    # -----------------------------------------
+    # STEP 2: Build search context
+    # -----------------------------------------
 
     context_parts = []
-
 
     for index, result in enumerate(
         results,
@@ -123,36 +109,31 @@ URL:
 """
         )
 
-
     context = "\n".join(
         context_parts
     )
 
-
-    # -----------------------------------------------------
-    # CREATE PROMPT
-    # -----------------------------------------------------
+    # -----------------------------------------
+    # STEP 3: Create prompt
+    # -----------------------------------------
 
     prompt = create_web_prompt()
 
-
-    # -----------------------------------------------------
-    # LOAD LLM
-    # -----------------------------------------------------
+    # -----------------------------------------
+    # STEP 4: Get LLM
+    # -----------------------------------------
 
     llm = get_llm()
 
-
-    # -----------------------------------------------------
-    # CREATE CHAIN
-    # -----------------------------------------------------
+    # -----------------------------------------
+    # STEP 5: Create chain
+    # -----------------------------------------
 
     chain = prompt | llm
 
-
-    # -----------------------------------------------------
-    # CALL LLM
-    # -----------------------------------------------------
+    # -----------------------------------------
+    # STEP 6: Generate answer
+    # -----------------------------------------
 
     response = chain.invoke(
         {
@@ -161,10 +142,17 @@ URL:
         }
     )
 
+    # -----------------------------------------
+    # STEP 7: Convert response to text
+    # -----------------------------------------
 
-    # -----------------------------------------------------
-    # COLLECT SOURCES
-    # -----------------------------------------------------
+    answer = get_response_text(
+        response
+    )
+
+    # -----------------------------------------
+    # STEP 8: Prepare sources
+    # -----------------------------------------
 
     sources = []
 
@@ -181,7 +169,6 @@ URL:
         )
 
         if href:
-
             sources.append(
                 {
                     "title": title,
@@ -189,12 +176,11 @@ URL:
                 }
             )
 
-
-    # -----------------------------------------------------
-    # RETURN ANSWER + SOURCES
-    # -----------------------------------------------------
+    # -----------------------------------------
+    # STEP 9: Return answer + sources
+    # -----------------------------------------
 
     return {
-        "answer": response.content,
+        "answer": answer,
         "sources": sources,
     }

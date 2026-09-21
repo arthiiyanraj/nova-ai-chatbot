@@ -1,9 +1,14 @@
 import os
+import time
 
 from dotenv import load_dotenv
+
 from langchain_core.language_models.llms import LLM
 from langchain_ollama import ChatOllama
+
 from google import genai
+from google.genai import errors
+
 
 load_dotenv()
 
@@ -21,6 +26,7 @@ class GeminiLLM(LLM):
         run_manager=None,
         **kwargs,
     ):
+
         api_key = os.getenv("GEMINI_API_KEY")
 
         model = os.getenv(
@@ -37,12 +43,51 @@ class GeminiLLM(LLM):
             api_key=api_key
         )
 
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-        )
+        max_retries = 3
 
-        return response.text
+        for attempt in range(max_retries):
+
+            try:
+
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                )
+
+                if not response.text:
+                    raise ValueError(
+                        "Gemini returned an empty response."
+                    )
+
+                return response.text
+
+            except errors.ServerError as error:
+
+                if attempt == max_retries - 1:
+
+                    raise RuntimeError(
+                        "Gemini is temporarily unavailable. "
+                        "Please try again in a moment."
+                    ) from error
+
+                wait_seconds = 2 ** attempt
+
+                time.sleep(
+                    wait_seconds
+                )
+
+            except errors.ClientError as error:
+
+                raise RuntimeError(
+                    "Gemini API request failed. "
+                    "Please check your API key and API settings."
+                ) from error
+
+            except Exception as error:
+
+                raise RuntimeError(
+                    f"Gemini request failed: {error}"
+                ) from error
 
 
 def get_llm():
@@ -53,6 +98,7 @@ def get_llm():
     ).lower()
 
     if provider == "local":
+
         return ChatOllama(
             model=os.getenv(
                 "LLM_MODEL",
@@ -62,6 +108,7 @@ def get_llm():
         )
 
     if provider == "gemini":
+
         return GeminiLLM()
 
     raise ValueError(

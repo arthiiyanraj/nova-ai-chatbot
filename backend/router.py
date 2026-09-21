@@ -2,10 +2,6 @@ from backend.llm import get_llm
 from langchain_core.prompts import ChatPromptTemplate
 
 
-# ============================================================
-# ROUTER PROMPT
-# ============================================================
-
 ROUTER_SYSTEM_PROMPT = """
 You are the routing system of NOVA AI.
 
@@ -69,116 +65,73 @@ WEB
 """
 
 
-# ============================================================
-# CREATE ROUTER PROMPT
-# ============================================================
-
 def create_router_prompt():
-
     return ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                ROUTER_SYSTEM_PROMPT,
-            ),
-            (
-                "human",
-                "{question}",
-            ),
+            ("system", ROUTER_SYSTEM_PROMPT),
+            ("human", "{question}"),
         ]
     )
 
 
-# ============================================================
-# RULE-BASED PDF DETECTION
-# ============================================================
-
 def detect_pdf_question(question):
-
     text = question.lower().strip()
-
 
     pdf_keywords = [
         "this document",
         "the document",
         "my document",
         "uploaded document",
-
         "this pdf",
         "the pdf",
         "my pdf",
         "uploaded pdf",
-
         "this report",
         "the report",
         "my report",
         "uploaded report",
-
         "this file",
         "the file",
         "my file",
         "uploaded file",
-
         "document about",
         "pdf about",
         "report about",
-
         "summarize this document",
         "summarise this document",
-
         "summarize the document",
         "summarise the document",
-
         "summarize this pdf",
         "summarise this pdf",
-
         "summarize the pdf",
         "summarise the pdf",
-
         "according to the document",
         "according to this document",
-
         "according to the pdf",
         "according to this pdf",
-
         "from the document",
         "from this document",
-
         "from the pdf",
         "from this pdf",
-
         "in the document",
         "in this document",
-
         "in the pdf",
         "in this pdf",
-
         "what does this document",
         "what does the document",
-
         "what is this document",
         "what is the document",
     ]
 
-
     for keyword in pdf_keywords:
-
         if keyword in text:
-
             return True
-
 
     return False
 
 
-# ============================================================
-# RULE-BASED WEB DETECTION
-# ============================================================
-
 def detect_web_question(question):
-
     text = question.lower().strip()
-
 
     web_keywords = [
         "latest",
@@ -188,63 +141,62 @@ def detect_web_question(question):
         "recent",
         "news",
         "live",
-
         "search the web",
         "search online",
         "search internet",
         "web search",
-
         "current price",
         "latest price",
-
         "latest version",
         "current version",
-
         "recent release",
         "latest release",
     ]
 
-
     for keyword in web_keywords:
-
         if keyword in text:
-
             return True
-
 
     return False
 
 
-# ============================================================
-# MAIN ROUTER
-# ============================================================
+def get_response_text(response):
+    """
+    Convert different LangChain response types
+    into plain text.
+
+    GeminiLLM returns a string.
+    ChatOllama can return an AIMessage.
+    """
+
+    if isinstance(response, str):
+        return response.strip()
+
+    if hasattr(response, "content"):
+        return str(response.content).strip()
+
+    return str(response).strip()
+
 
 def route_question(question):
 
-    # --------------------------------------------------------
-    # STEP 1
-    # Check PDF keywords first
-    # --------------------------------------------------------
+    # -----------------------------------------
+    # STEP 1: Check PDF
+    # -----------------------------------------
 
     if detect_pdf_question(question):
-
         return "PDF"
 
-
-    # --------------------------------------------------------
-    # STEP 2
-    # Check Web keywords
-    # --------------------------------------------------------
+    # -----------------------------------------
+    # STEP 2: Check WEB
+    # -----------------------------------------
 
     if detect_web_question(question):
-
         return "WEB"
 
-
-    # --------------------------------------------------------
-    # STEP 3
-    # Use LLM for remaining questions
-    # --------------------------------------------------------
+    # -----------------------------------------
+    # STEP 3: Ask LLM router
+    # -----------------------------------------
 
     llm = get_llm()
 
@@ -252,44 +204,33 @@ def route_question(question):
 
     chain = prompt | llm
 
-
     response = chain.invoke(
         {
             "question": question,
         }
     )
 
+    # -----------------------------------------
+    # STEP 4: Convert response to text
+    # -----------------------------------------
 
-    raw_route = (
-        response.content
-        .strip()
-        .upper()
-    )
+    raw_route = get_response_text(response).upper()
 
+    # -----------------------------------------
+    # STEP 5: Clean router response
+    # -----------------------------------------
 
-    # --------------------------------------------------------
-    # STEP 4
-    # Validate LLM result
-    # --------------------------------------------------------
-
-    if raw_route == "PDF":
-
+    if "PDF" in raw_route:
         return "PDF"
 
-
-    if raw_route == "WEB":
-
+    if "WEB" in raw_route:
         return "WEB"
 
-
-    if raw_route == "GENERAL":
-
+    if "GENERAL" in raw_route:
         return "GENERAL"
 
-
-    # --------------------------------------------------------
-    # STEP 5
-    # Safe default
-    # --------------------------------------------------------
+    # -----------------------------------------
+    # STEP 6: Safe fallback
+    # -----------------------------------------
 
     return "GENERAL"
