@@ -950,13 +950,6 @@ if chat_input:
 
     if uploaded_pdf_failed:
 
-        # ----------------------------------------------------
-        # Do NOT send the question to the general AI.
-        #
-        # Otherwise the AI may answer from its own knowledge
-        # even though the user expected a PDF-based answer.
-        # ----------------------------------------------------
-
         if question:
 
             st.warning(
@@ -1046,11 +1039,6 @@ if chat_input:
 
                 # =================================================
                 # NEWLY UPLOADED PDF
-                # =================================================
-                #
-                # If the user attached a PDF together with
-                # the question, always answer from that PDF.
-                #
                 # =================================================
 
                 if uploaded_pdf_processed:
@@ -1198,9 +1186,33 @@ if chat_input:
                     )
 
 
-                    answer = (
-                        response.content
-                    )
+                    # ---------------------------------------------
+                    # SUPPORT BOTH GEMINI AND OLLAMA
+                    # ---------------------------------------------
+
+                    if isinstance(
+                        response,
+                        str,
+                    ):
+
+                        answer = (
+                            response.strip()
+                        )
+
+                    elif hasattr(
+                        response,
+                        "content",
+                    ):
+
+                        answer = str(
+                            response.content
+                        ).strip()
+
+                    else:
+
+                        answer = str(
+                            response
+                        ).strip()
 
 
                 # =================================================
