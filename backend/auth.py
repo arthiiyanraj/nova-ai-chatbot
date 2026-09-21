@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 from werkzeug.security import (
@@ -9,23 +10,13 @@ from werkzeug.security import (
 DB_PATH = "data/users.db"
 
 
-# --------------------------------
-# Database connection
-# --------------------------------
-
 def get_connection():
-
+    os.makedirs("data", exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
 
-# --------------------------------
-# Create users table
-# --------------------------------
-
 def create_users_table():
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -42,22 +33,13 @@ def create_users_table():
     connection.close()
 
 
-# --------------------------------
-# Register user
-# --------------------------------
-
 def register_user(username, password):
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
-    hashed_password = generate_password_hash(
-        password
-    )
+    hashed_password = generate_password_hash(password)
 
     try:
-
         cursor.execute(
             """
             INSERT INTO users (
@@ -73,26 +55,17 @@ def register_user(username, password):
         )
 
         connection.commit()
-
         return True
 
     except sqlite3.IntegrityError:
-
         return False
 
     finally:
-
         connection.close()
 
 
-# --------------------------------
-# Login user
-# --------------------------------
-
 def login_user(username, password):
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -109,7 +82,6 @@ def login_user(username, password):
     connection.close()
 
     if user is None:
-
         return None
 
     user_id = user[0]
@@ -122,7 +94,6 @@ def login_user(username, password):
     )
 
     if password_correct:
-
         return {
             "id": user_id,
             "username": username,

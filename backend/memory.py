@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 
@@ -5,18 +6,12 @@ DB_PATH = "data/users.db"
 
 
 def get_connection():
-
+    os.makedirs("data", exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
 
-# --------------------------------
-# Create memory table
-# --------------------------------
-
 def create_memory_table():
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -33,19 +28,16 @@ def create_memory_table():
     connection.close()
 
 
-# --------------------------------
-# Save memory
-# --------------------------------
-
 def save_memory(user_id, memory):
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
         """
-        INSERT INTO memories (user_id, memory)
+        INSERT INTO memories (
+            user_id,
+            memory
+        )
         VALUES (?, ?)
         """,
         (
@@ -58,14 +50,8 @@ def save_memory(user_id, memory):
     connection.close()
 
 
-# --------------------------------
-# Get memories
-# --------------------------------
-
 def get_memories(user_id):
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -89,16 +75,10 @@ def get_memories(user_id):
     ]
 
 
-# --------------------------------
-# Build current chat history
-# --------------------------------
-
 def build_chat_history(messages):
-
     history = []
 
     for message in messages:
-
         role = message["role"]
         content = message["content"]
 
@@ -112,14 +92,8 @@ def build_chat_history(messages):
     return history
 
 
-# --------------------------------
-# Detect useful user information
-# --------------------------------
-
 def detect_memory(text):
-
     text = text.strip()
-
     lower_text = text.lower()
 
     memory_patterns = [
@@ -133,9 +107,7 @@ def detect_memory(text):
     ]
 
     for pattern in memory_patterns:
-
         if lower_text.startswith(pattern):
-
             return text
 
     return None

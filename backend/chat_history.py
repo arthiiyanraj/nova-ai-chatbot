@@ -1,32 +1,18 @@
+import os
 import sqlite3
 
 
 DB_PATH = "data/users.db"
 
 
-# =========================================================
-# DATABASE CONNECTION
-# =========================================================
-
 def get_connection():
-
+    os.makedirs("data", exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
 
-# =========================================================
-# CREATE TABLES
-# =========================================================
-
 def create_chat_tables():
-
     connection = get_connection()
-
     cursor = connection.cursor()
-
-
-    # -----------------------------------------------------
-    # CHAT SESSIONS TABLE
-    # -----------------------------------------------------
 
     cursor.execute(
         """
@@ -38,11 +24,6 @@ def create_chat_tables():
         )
         """
     )
-
-
-    # -----------------------------------------------------
-    # CHAT MESSAGES TABLE
-    # -----------------------------------------------------
 
     cursor.execute(
         """
@@ -56,25 +37,16 @@ def create_chat_tables():
         """
     )
 
-
     connection.commit()
-
     connection.close()
 
-
-# =========================================================
-# CREATE NEW CHAT SESSION
-# =========================================================
 
 def create_chat_session(
     user_id,
     title="New Chat",
 ):
-
     connection = get_connection()
-
     cursor = connection.cursor()
-
 
     cursor.execute(
         """
@@ -90,27 +62,18 @@ def create_chat_session(
         ),
     )
 
-
     connection.commit()
 
     session_id = cursor.lastrowid
 
     connection.close()
 
-
     return session_id
 
 
-# =========================================================
-# GET USER CHAT SESSIONS
-# =========================================================
-
 def get_chat_sessions(user_id):
-
     connection = get_connection()
-
     cursor = connection.cursor()
-
 
     cursor.execute(
         """
@@ -122,29 +85,20 @@ def get_chat_sessions(user_id):
         (user_id,),
     )
 
-
     rows = cursor.fetchall()
 
     connection.close()
 
-
     return rows
 
-
-# =========================================================
-# SAVE MESSAGE
-# =========================================================
 
 def save_chat_message(
     session_id,
     role,
     content,
 ):
-
     connection = get_connection()
-
     cursor = connection.cursor()
-
 
     cursor.execute(
         """
@@ -162,22 +116,13 @@ def save_chat_message(
         ),
     )
 
-
     connection.commit()
-
     connection.close()
 
 
-# =========================================================
-# GET SESSION MESSAGES
-# =========================================================
-
 def get_chat_messages(session_id):
-
     connection = get_connection()
-
     cursor = connection.cursor()
-
 
     cursor.execute(
         """
@@ -189,16 +134,13 @@ def get_chat_messages(session_id):
         (session_id,),
     )
 
-
     rows = cursor.fetchall()
 
     connection.close()
 
-
     messages = []
 
     for role, content in rows:
-
         messages.append(
             {
                 "role": role,
@@ -206,23 +148,15 @@ def get_chat_messages(session_id):
             }
         )
 
-
     return messages
 
-
-# =========================================================
-# UPDATE CHAT TITLE
-# =========================================================
 
 def update_chat_title(
     session_id,
     title,
 ):
-
     connection = get_connection()
-
     cursor = connection.cursor()
-
 
     cursor.execute(
         """
@@ -236,7 +170,5 @@ def update_chat_title(
         ),
     )
 
-
     connection.commit()
-
     connection.close()

@@ -1,30 +1,17 @@
+import os
 import sqlite3
 
-
-# ============================================================
-# DATABASE PATH
-# ============================================================
 
 DB_PATH = "data/users.db"
 
 
-# ============================================================
-# DATABASE CONNECTION
-# ============================================================
-
 def get_connection():
-
+    os.makedirs("data", exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
 
-# ============================================================
-# CREATE PDF TABLE
-# ============================================================
-
 def create_pdf_table():
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -42,13 +29,8 @@ def create_pdf_table():
     )
 
     connection.commit()
-
     connection.close()
 
-
-# ============================================================
-# SAVE PDF
-# ============================================================
 
 def save_pdf_document(
     user_id,
@@ -57,9 +39,7 @@ def save_pdf_document(
     characters,
     chunks,
 ):
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -83,20 +63,11 @@ def save_pdf_document(
     )
 
     connection.commit()
-
     connection.close()
 
 
-# ============================================================
-# GET USER PDFs
-# ============================================================
-
-def get_user_pdfs(
-    user_id,
-):
-
+def get_user_pdfs(user_id):
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -118,12 +89,9 @@ def get_user_pdfs(
 
     connection.close()
 
-
     documents = []
 
-
     for row in rows:
-
         documents.append(
             {
                 "document_id": row[0],
@@ -134,21 +102,14 @@ def get_user_pdfs(
             }
         )
 
-
     return documents
 
-
-# ============================================================
-# DELETE PDF METADATA
-# ============================================================
 
 def delete_pdf_document(
     user_id,
     document_id,
 ):
-
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -166,8 +127,6 @@ def delete_pdf_document(
     deleted_rows = cursor.rowcount
 
     connection.commit()
-
     connection.close()
-
 
     return deleted_rows > 0
