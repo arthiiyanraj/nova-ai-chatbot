@@ -10,10 +10,6 @@ def process_pdf(
     user_id,
 ):
 
-    # ========================================================
-    # READ PDF
-    # ========================================================
-
     try:
 
         pdf_text = read_pdf(
@@ -33,17 +29,16 @@ def process_pdf(
             "document_name": uploaded_file.name,
         }
 
-    # ========================================================
-    # CHECK TEXT
-    # ========================================================
+    pdf_text = pdf_text.strip()
 
-    if not pdf_text.strip():
+    if not pdf_text:
 
         return {
             "success": False,
             "message": (
                 "The PDF was opened successfully, "
-                "but no readable text was found."
+                "but no readable text was found. "
+                "This may be a scanned/image-only PDF."
             ),
             "characters": 0,
             "chunks": 0,
@@ -51,27 +46,18 @@ def process_pdf(
             "document_name": uploaded_file.name,
         }
 
-    # ========================================================
-    # SPLIT TEXT INTO CHUNKS
-    # ========================================================
-
     chunks = split_text(
         pdf_text,
         chunk_size=700,
         chunk_overlap=100,
     )
 
-    # ========================================================
-    # CHECK CHUNKS
-    # ========================================================
-
     if not chunks:
 
         return {
             "success": False,
             "message": (
-                "The PDF contains text, "
-                "but no usable chunks were created."
+                "No usable text chunks were created."
             ),
             "characters": len(pdf_text),
             "chunks": 0,
@@ -79,17 +65,9 @@ def process_pdf(
             "document_name": uploaded_file.name,
         }
 
-    # ========================================================
-    # CREATE DOCUMENT ID
-    # ========================================================
-
     document_id = str(
         uuid.uuid4()
     )
-
-    # ========================================================
-    # CREATE VECTOR STORE
-    # ========================================================
 
     try:
 
@@ -104,7 +82,8 @@ def process_pdf(
         return {
             "success": False,
             "message": (
-                f"Failed to create PDF knowledge base: {error}"
+                "Failed to create the PDF "
+                f"knowledge base: {error}"
             ),
             "characters": len(pdf_text),
             "chunks": len(chunks),
@@ -112,15 +91,9 @@ def process_pdf(
             "document_name": uploaded_file.name,
         }
 
-    # ========================================================
-    # SUCCESS
-    # ========================================================
-
     return {
         "success": True,
-        "message": (
-            "PDF processed successfully."
-        ),
+        "message": "PDF processed successfully.",
         "characters": len(pdf_text),
         "chunks": len(chunks),
         "document_id": document_id,

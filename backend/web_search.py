@@ -1,13 +1,12 @@
 from ddgs import DDGS
 
 
-# =========================================================
-# WEB SEARCH
-# =========================================================
-
-def web_search(query, max_results=5):
+def web_search(query, max_results=6):
     """
-    Search the web and return search results.
+    Search the web using DuckDuckGo.
+
+    Returns:
+        list[dict]
     """
 
     results = []
@@ -23,20 +22,29 @@ def web_search(query, max_results=5):
 
             for result in search_results:
 
+                title = result.get(
+                    "title",
+                    "",
+                )
+
+                body = result.get(
+                    "body",
+                    "",
+                )
+
+                href = result.get(
+                    "href",
+                    "",
+                )
+
+                if not title and not body:
+                    continue
+
                 results.append(
                     {
-                        "title": result.get(
-                            "title",
-                            "",
-                        ),
-                        "body": result.get(
-                            "body",
-                            "",
-                        ),
-                        "href": result.get(
-                            "href",
-                            "",
-                        ),
+                        "title": title.strip(),
+                        "body": body.strip(),
+                        "href": href.strip(),
                     }
                 )
 

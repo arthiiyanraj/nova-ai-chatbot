@@ -1,5 +1,8 @@
 import streamlit as st
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 
 # ============================================================
 # BACKEND IMPORTS
@@ -67,6 +70,10 @@ from backend.vectorstore import (
     delete_vector_store,
 )
 
+from backend.response_utils import (
+    get_response_text,
+)
+
 
 # ============================================================
 # PAGE CONFIG
@@ -81,7 +88,7 @@ st.set_page_config(
 
 
 # ============================================================
-# SIMPLE PROFESSIONAL SPACING
+# PROFESSIONAL SPACING
 # ============================================================
 
 st.markdown(
@@ -127,23 +134,62 @@ initialize_session()
 
 
 if "active_chat_id" not in st.session_state:
-
     st.session_state.active_chat_id = None
 
 
 if "pdf_documents" not in st.session_state:
-
     st.session_state.pdf_documents = []
 
 
 if "active_pdf_id" not in st.session_state:
-
     st.session_state.active_pdf_id = None
 
 
 if "pdf_loaded_for_user" not in st.session_state:
-
     st.session_state.pdf_loaded_for_user = None
+
+
+# ============================================================
+# CURRENT DATE
+# ============================================================
+
+def get_current_date():
+
+    now = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    )
+
+    return now.strftime(
+        "%A, %B %d, %Y"
+    ).replace(
+        " 0",
+        " ",
+    )
+
+
+def is_date_question(question):
+
+    text = question.lower().strip()
+
+    date_patterns = [
+        "what is today's date",
+        "what is todays date",
+        "what's today's date",
+        "what's todays date",
+        "what is the date today",
+        "what date is it",
+        "today's date",
+        "todays date",
+        "current date",
+        "date today",
+        "what day is today",
+        "what is today",
+    ]
+
+    return any(
+        pattern in text
+        for pattern in date_patterns
+    )
 
 
 # ============================================================
@@ -166,7 +212,6 @@ if not st.session_state.logged_in:
             "Create Account",
         ]
     )
-
 
     # ========================================================
     # LOGIN
@@ -212,6 +257,9 @@ if not st.session_state.logged_in:
                     login(user)
 
                     st.session_state.pdf_loaded_for_user = None
+                    st.session_state.pdf_documents = []
+                    st.session_state.active_pdf_id = None
+                    st.session_state.active_chat_id = None
 
                     st.rerun()
 
@@ -220,7 +268,6 @@ if not st.session_state.logged_in:
                     st.error(
                         "Invalid username or password."
                     )
-
 
     # ========================================================
     # REGISTER
@@ -298,7 +345,7 @@ user = st.session_state.user
 
 
 # ============================================================
-# LOAD USER PDFS
+# LOAD USER DOCUMENTS
 # ============================================================
 
 if (
@@ -315,6 +362,16 @@ if (
     st.session_state.pdf_loaded_for_user = (
         user["id"]
     )
+
+    if st.session_state.pdf_documents:
+
+        if not st.session_state.active_pdf_id:
+
+            st.session_state.active_pdf_id = (
+                st.session_state.pdf_documents[0][
+                    "document_id"
+                ]
+            )
 
 
 # ============================================================
@@ -340,10 +397,7 @@ if (
         "New Chat",
     )
 
-    st.session_state.active_chat_id = (
-        chat_id
-    )
-
+    st.session_state.active_chat_id = chat_id
     st.session_state.messages = []
 
     st.rerun()
@@ -389,7 +443,6 @@ with st.sidebar:
 
     st.divider()
 
-
     # ========================================================
     # USER
     # ========================================================
@@ -397,7 +450,6 @@ with st.sidebar:
     st.write(
         f"**{user['username']}**"
     )
-
 
     # ========================================================
     # NEW CHAT
@@ -421,9 +473,7 @@ with st.sidebar:
 
         st.rerun()
 
-
     st.divider()
-
 
     # ========================================================
     # CHAT HISTORY
@@ -438,7 +488,6 @@ with st.sidebar:
     for chat in chat_sessions:
 
         chat_id = chat[0]
-
         chat_title = chat[1]
 
         if (
@@ -470,7 +519,6 @@ with st.sidebar:
 
             st.rerun()
 
-
     # ========================================================
     # DOCUMENTS
     # ========================================================
@@ -496,24 +544,43 @@ with st.sidebar:
                 display_name
             ] = document["document_id"]
 
+        option_names = list(
+            pdf_options.keys()
+        )
+
+        # ----------------------------------------------------
+        # Find currently active document
+        # ----------------------------------------------------
+
+        current_index = 0
+
+        if st.session_state.active_pdf_id:
+
+            for index, name in enumerate(
+                option_names
+            ):
+
+                if (
+                    pdf_options[name]
+                    == st.session_state.active_pdf_id
+                ):
+
+                    current_index = index
+                    break
 
         selected_pdf_name = st.selectbox(
             "Active document",
-            list(
-                pdf_options.keys()
-            ),
+            option_names,
+            index=current_index,
         )
-
 
         selected_pdf_id = pdf_options[
             selected_pdf_name
         ]
 
-
         st.session_state.active_pdf_id = (
             selected_pdf_id
         )
-
 
         selected_document = next(
             (
@@ -528,7 +595,6 @@ with st.sidebar:
             None,
         )
 
-
         if selected_document:
 
             st.caption(
@@ -538,7 +604,6 @@ with st.sidebar:
             st.caption(
                 f"{selected_document['chunks']} chunks"
             )
-
 
             # =================================================
             # DELETE DOCUMENT
@@ -563,30 +628,15 @@ with st.sidebar:
                         ]
                     )
 
-
-                    # -----------------------------------------
-                    # Delete Chroma vectors
-                    # -----------------------------------------
-
                     delete_vector_store(
                         user["id"],
                         document_id,
                     )
 
-
-                    # -----------------------------------------
-                    # Delete SQLite record
-                    # -----------------------------------------
-
                     delete_pdf_document(
                         user["id"],
                         document_id,
                     )
-
-
-                    # -----------------------------------------
-                    # Remove from session
-                    # -----------------------------------------
 
                     st.session_state.pdf_documents = [
                         document
@@ -600,22 +650,25 @@ with st.sidebar:
                         )
                     ]
 
+                    if (
+                        st.session_state.pdf_documents
+                    ):
 
-                    # -----------------------------------------
-                    # Clear active document
-                    # -----------------------------------------
+                        st.session_state.active_pdf_id = (
+                            st.session_state.pdf_documents[0][
+                                "document_id"
+                            ]
+                        )
 
-                    st.session_state.active_pdf_id = (
-                        None
-                    )
+                    else:
 
+                        st.session_state.active_pdf_id = None
 
                     st.success(
                         f"{document_name} deleted."
                     )
 
                     st.rerun()
-
 
                 except Exception as error:
 
@@ -624,7 +677,6 @@ with st.sidebar:
                     )
 
                     st.exception(error)
-
 
     # ========================================================
     # LOGOUT
@@ -639,19 +691,10 @@ with st.sidebar:
 
         logout()
 
-        st.session_state.active_chat_id = (
-            None
-        )
-
+        st.session_state.active_chat_id = None
         st.session_state.pdf_documents = []
-
-        st.session_state.active_pdf_id = (
-            None
-        )
-
-        st.session_state.pdf_loaded_for_user = (
-            None
-        )
+        st.session_state.active_pdf_id = None
+        st.session_state.pdf_loaded_for_user = None
 
         st.rerun()
 
@@ -683,7 +726,6 @@ for chat in get_chat_sessions(
     ):
 
         current_chat_title = chat[1]
-
         break
 
 
@@ -716,7 +758,6 @@ if (
         None,
     )
 
-
     if active_pdf:
 
         st.caption(
@@ -731,7 +772,6 @@ if (
 for message in st.session_state.messages:
 
     role = message["role"]
-
     content = message["content"]
 
     with st.chat_message(role):
@@ -747,7 +787,7 @@ for message in st.session_state.messages:
 
 chat_input = st.chat_input(
     "Message NOVA...",
-    accept_file=True,
+    accept_file="multiple",
     file_type=["pdf"],
     max_upload_size=200,
 )
@@ -760,77 +800,61 @@ chat_input = st.chat_input(
 if chat_input:
 
     # ========================================================
-    # GET QUESTION
+    # QUESTION
     # ========================================================
 
     question = chat_input.text.strip()
 
+    # ========================================================
+    # FILES
+    # ========================================================
+
+    uploaded_files = list(
+        chat_input.files
+    )
 
     # ========================================================
-    # GET ATTACHED FILES
-    # ========================================================
-
-    uploaded_files = chat_input.files
-
-
-    # ========================================================
-    # PDF PROCESSING STATUS
+    # UPLOAD STATUS
     # ========================================================
 
     uploaded_pdf_processed = False
-
     uploaded_pdf_failed = False
 
-    uploaded_pdf_name = None
-
+    processed_document_names = []
 
     # ========================================================
-    # PROCESS ATTACHED PDF
+    # PROCESS ALL UPLOADED PDF FILES
     # ========================================================
 
     if uploaded_files:
 
-        uploaded_file = uploaded_files[0]
+        with st.spinner(
+            "Processing uploaded document(s)..."
+        ):
 
-        uploaded_pdf_name = (
-            uploaded_file.name
-        )
+            for uploaded_file in uploaded_files:
 
+                file_name = uploaded_file.name
 
-        # ====================================================
-        # CHECK FILE CONTENT
-        # ====================================================
+                try:
 
-        try:
+                    file_bytes = (
+                        uploaded_file.getvalue()
+                    )
 
-            file_bytes = (
-                uploaded_file.getvalue()
-            )
+                except Exception:
 
-        except Exception:
+                    file_bytes = b""
 
-            file_bytes = b""
+                if not file_bytes:
 
+                    uploaded_pdf_failed = True
 
-        if not file_bytes:
+                    st.error(
+                        f"{file_name} is empty."
+                    )
 
-            uploaded_pdf_failed = True
-
-            st.error(
-                "The selected PDF is empty. "
-                "Please choose the PDF again."
-            )
-
-
-        else:
-
-            # =================================================
-            # PROCESS PDF
-            # =================================================
-
-            with st.spinner(
-                "Processing document..."
-            ):
+                    continue
 
                 try:
 
@@ -838,11 +862,6 @@ if chat_input:
                         uploaded_file,
                         user["id"],
                     )
-
-
-                    # =========================================
-                    # SUCCESS
-                    # =========================================
 
                     if result["success"]:
 
@@ -861,7 +880,6 @@ if chat_input:
                                 "chunks"
                             ],
                         )
-
 
                         document = {
                             "document_id": (
@@ -887,20 +905,18 @@ if chat_input:
                             "created_at": "",
                         }
 
-
-                        # =====================================
-                        # ADD TO DOCUMENT LIST
-                        # =====================================
+                        # ------------------------------------
+                        # Add newest document
+                        # ------------------------------------
 
                         st.session_state.pdf_documents.insert(
                             0,
                             document,
                         )
 
-
-                        # =====================================
-                        # MAKE DOCUMENT ACTIVE
-                        # =====================================
+                        # ------------------------------------
+                        # Make newest document active
+                        # ------------------------------------
 
                         st.session_state.active_pdf_id = (
                             result[
@@ -908,61 +924,36 @@ if chat_input:
                             ]
                         )
 
+                        uploaded_pdf_processed = True
 
-                        uploaded_pdf_processed = (
-                            True
-                        )
-
-
-                    # =========================================
-                    # PROCESSING FAILED
-                    # =========================================
-
-                    else:
-
-                        uploaded_pdf_failed = (
-                            True
-                        )
-
-                        st.error(
+                        processed_document_names.append(
                             result[
-                                "message"
+                                "document_name"
                             ]
                         )
 
+                    else:
+
+                        uploaded_pdf_failed = True
+
+                        st.error(
+                            f"{file_name}: "
+                            f"{result['message']}"
+                        )
 
                 except Exception as error:
 
-                    uploaded_pdf_failed = (
-                        True
-                    )
+                    uploaded_pdf_failed = True
 
                     st.error(
+                        f"{file_name}: "
                         "Document processing failed."
                     )
 
                     st.exception(error)
 
-
     # ========================================================
-    # IF PDF FAILED
-    # ========================================================
-
-    if uploaded_pdf_failed:
-
-        if question:
-
-            st.warning(
-                "Your question was not sent because "
-                "the PDF could not be processed. "
-                "Please upload the PDF again."
-            )
-
-        st.stop()
-
-
-    # ========================================================
-    # PDF ONLY
+    # NO QUESTION + FILES
     # ========================================================
 
     if (
@@ -970,12 +961,28 @@ if chat_input:
         and not question
     ):
 
-        st.success(
-            f"{uploaded_pdf_name} is ready."
-        )
+        if len(
+            processed_document_names
+        ) == 1:
+
+            st.success(
+                f"{processed_document_names[0]} is ready."
+            )
+
+        else:
+
+            st.success(
+                f"{len(processed_document_names)} "
+                "documents are ready."
+            )
+
+        if uploaded_pdf_failed:
+
+            st.warning(
+                "Some documents could not be processed."
+            )
 
         st.rerun()
-
 
     # ========================================================
     # NOTHING TO SEND
@@ -985,6 +992,21 @@ if chat_input:
 
         st.stop()
 
+    # ========================================================
+    # IF UPLOAD FAILED BUT QUESTION EXISTS
+    # ========================================================
+
+    if (
+        uploaded_pdf_failed
+        and not uploaded_pdf_processed
+    ):
+
+        st.error(
+            "The uploaded document could not be processed, "
+            "so the question was not sent."
+        )
+
+        st.stop()
 
     # ========================================================
     # SAVE USER MESSAGE
@@ -997,13 +1019,11 @@ if chat_input:
         }
     )
 
-
     save_chat_message(
         st.session_state.active_chat_id,
         "user",
         question,
     )
-
 
     # ========================================================
     # DISPLAY USER MESSAGE
@@ -1015,10 +1035,13 @@ if chat_input:
             question
         )
 
-
     # ========================================================
     # ASSISTANT RESPONSE
     # ========================================================
+
+    answer = ""
+    web_sources = []
+    route = "GENERAL"
 
     with st.chat_message("assistant"):
 
@@ -1028,28 +1051,36 @@ if chat_input:
 
             try:
 
-                answer = ""
-
-                web_sources = []
-
-                route = None
-
-                use_pdf = False
-
-
                 # =================================================
-                # NEWLY UPLOADED PDF
+                # CURRENT DATE
                 # =================================================
 
-                if uploaded_pdf_processed:
+                if is_date_question(question):
+
+                    route = "GENERAL"
+
+                    answer = (
+                        f"Today is "
+                        f"{get_current_date()}."
+                    )
+
+                # =================================================
+                # NEWLY UPLOADED PDF + QUESTION
+                # =================================================
+
+                elif uploaded_pdf_processed:
 
                     route = "PDF"
 
-                    use_pdf = True
-
+                    answer = ask_pdf(
+                        question,
+                        user["id"],
+                        st.session_state.active_pdf_id,
+                        top_k=5,
+                    )
 
                 # =================================================
-                # AUTO ROUTER
+                # SMART ROUTER
                 # =================================================
 
                 else:
@@ -1058,10 +1089,9 @@ if chat_input:
                         question
                     )
 
-
-                    # ---------------------------------------------
-                    # PDF ROUTE
-                    # ---------------------------------------------
+                    # =============================================
+                    # PDF
+                    # =============================================
 
                     if route == "PDF":
 
@@ -1071,149 +1101,119 @@ if chat_input:
                             st.session_state.active_pdf_id
                         ):
 
-                            use_pdf = True
+                            answer = ask_pdf(
+                                question,
+                                user["id"],
+                                st.session_state.active_pdf_id,
+                                top_k=5,
+                            )
 
                         else:
 
+                            answer = (
+                                "Please upload a PDF first "
+                                "or select an uploaded document "
+                                "from the sidebar."
+                            )
+
                             route = "GENERAL"
 
+                    # =============================================
+                    # WEB
+                    # =============================================
 
-                    # ---------------------------------------------
-                    # WEB ROUTE
-                    # ---------------------------------------------
-
-                    if route == "WEB":
+                    elif route == "WEB":
 
                         web_result = ask_web(
                             question,
-                            max_results=5,
+                            max_results=6,
                         )
-
 
                         answer = (
-                            web_result[
-                                "answer"
-                            ]
+                            web_result["answer"]
                         )
-
 
                         web_sources = (
-                            web_result[
-                                "sources"
-                            ]
+                            web_result["sources"]
                         )
 
-
-                # =================================================
-                # PDF ANSWER
-                # =================================================
-
-                if use_pdf:
-
-                    answer = ask_pdf(
-                        question,
-                        user["id"],
-                        st.session_state.active_pdf_id,
-                        top_k=3,
-                    )
-
-
-                # =================================================
-                # GENERAL ANSWER
-                # =================================================
-
-                elif route == "GENERAL":
-
-                    llm = get_llm()
-
-                    prompt = create_chat_prompt()
-
-                    chain = prompt | llm
-
-
-                    # ---------------------------------------------
-                    # PREVIOUS CHAT HISTORY
-                    # ---------------------------------------------
-
-                    chat_history = (
-                        build_chat_history(
-                            st.session_state.messages[
-                                :-1
-                            ]
-                        )
-                    )
-
-
-                    # ---------------------------------------------
-                    # LONG-TERM MEMORY
-                    # ---------------------------------------------
-
-                    memories = get_memories(
-                        user["id"]
-                    )
-
-
-                    if memories:
-
-                        memory_text = "\n".join(
-                            f"- {memory}"
-                            for memory in memories
-                        )
+                    # =============================================
+                    # GENERAL
+                    # =============================================
 
                     else:
 
-                        memory_text = (
-                            "No saved memories."
+                        llm = get_llm()
+
+                        prompt = create_chat_prompt()
+
+                        chain = prompt | llm
+
+                        # -----------------------------------------
+                        # Previous messages
+                        # -----------------------------------------
+
+                        chat_history = (
+                            build_chat_history(
+                                st.session_state.messages[
+                                    :-1
+                                ]
+                            )
                         )
 
+                        # -----------------------------------------
+                        # Long-term memory
+                        # -----------------------------------------
 
-                    # ---------------------------------------------
-                    # GENERATE GENERAL ANSWER
-                    # ---------------------------------------------
-
-                    response = chain.invoke(
-                        {
-                            "memories": (
-                                memory_text
-                            ),
-                            "chat_history": (
-                                chat_history
-                            ),
-                            "question": (
-                                question
-                            ),
-                        }
-                    )
-
-
-                    # ---------------------------------------------
-                    # SUPPORT BOTH GEMINI AND OLLAMA
-                    # ---------------------------------------------
-
-                    if isinstance(
-                        response,
-                        str,
-                    ):
-
-                        answer = (
-                            response.strip()
+                        memories = get_memories(
+                            user["id"]
                         )
 
-                    elif hasattr(
-                        response,
-                        "content",
-                    ):
+                        if memories:
 
-                        answer = str(
-                            response.content
-                        ).strip()
+                            memory_text = "\n".join(
+                                f"- {memory}"
+                                for memory in memories
+                            )
 
-                    else:
+                        else:
 
-                        answer = str(
+                            memory_text = (
+                                "No saved memories."
+                            )
+
+                        # -----------------------------------------
+                        # Generate answer
+                        # -----------------------------------------
+
+                        response = chain.invoke(
+                            {
+                                "memories": (
+                                    memory_text
+                                ),
+                                "chat_history": (
+                                    chat_history
+                                ),
+                                "question": (
+                                    question
+                                ),
+                            }
+                        )
+
+                        answer = get_response_text(
                             response
-                        ).strip()
+                        )
 
+                # =================================================
+                # EMPTY ANSWER SAFETY
+                # =================================================
+
+                if not answer:
+
+                    answer = (
+                        "I couldn't generate an answer "
+                        "right now. Please try again."
+                    )
 
                 # =================================================
                 # DISPLAY ANSWER
@@ -1222,7 +1222,6 @@ if chat_input:
                 st.markdown(
                     answer
                 )
-
 
                 # =================================================
                 # WEB SOURCES
@@ -1236,7 +1235,6 @@ if chat_input:
                         "Sources"
                     )
 
-
                     for source in web_sources:
 
                         title = source.get(
@@ -1249,13 +1247,11 @@ if chat_input:
                             "",
                         )
 
-
                         if url:
 
                             st.markdown(
                                 f"- [{title}]({url})"
                             )
-
 
             except Exception as error:
 
@@ -1272,7 +1268,6 @@ if chat_input:
                     error
                 )
 
-
     # ========================================================
     # SAVE MEMORY
     # ========================================================
@@ -1281,14 +1276,12 @@ if chat_input:
         question
     )
 
-
     if detected_memory:
 
         save_memory(
             user["id"],
             detected_memory,
         )
-
 
     # ========================================================
     # SAVE ASSISTANT MESSAGE
@@ -1300,7 +1293,6 @@ if chat_input:
         answer,
     )
 
-
     st.session_state.messages.append(
         {
             "role": "assistant",
@@ -1308,13 +1300,11 @@ if chat_input:
         }
     )
 
-
     # ========================================================
     # AUTOMATIC CHAT TITLE
     # ========================================================
 
     current_title = "New Chat"
-
 
     for chat in get_chat_sessions(
         user["id"]
@@ -1326,19 +1316,15 @@ if chat_input:
         ):
 
             current_title = chat[1]
-
             break
-
 
     if current_title == "New Chat":
 
         title = question[:40]
 
-
         if len(question) > 40:
 
             title += "..."
-
 
         update_chat_title(
             st.session_state.active_chat_id,
