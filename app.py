@@ -1,3 +1,10 @@
+import asyncio
+import hashlib
+import os
+import tempfile
+import wave
+import io
+
 import streamlit as st
 
 from datetime import datetime
@@ -14,7 +21,9 @@ from backend.auth import (
     login_user,
 )
 
-from backend.llm import get_llm
+from backend.llm import (
+    get_llm,
+)
 
 from backend.prompts import (
     create_chat_prompt,
@@ -74,6 +83,10 @@ from backend.response_utils import (
     get_response_text,
 )
 
+from backend.voice.orchestrator import (
+    process_voice,
+)
+
 
 # ============================================================
 # PAGE CONFIG
@@ -88,7 +101,7 @@ st.set_page_config(
 
 
 # ============================================================
-# PROFESSIONAL SPACING
+# PROFESSIONAL UI STYLING
 # ============================================================
 
 st.markdown(
@@ -149,11 +162,18 @@ if "pdf_loaded_for_user" not in st.session_state:
     st.session_state.pdf_loaded_for_user = None
 
 
+if "last_voice_hash" not in st.session_state:
+    st.session_state.last_voice_hash = None
+
+
 # ============================================================
 # CURRENT DATE
 # ============================================================
 
 def get_current_date():
+    """
+    Return current date in Indian Standard Time.
+    """
 
     now = datetime.now(
         ZoneInfo("Asia/Kolkata")
@@ -168,6 +188,9 @@ def get_current_date():
 
 
 def is_date_question(question):
+    """
+    Detect common questions asking for today's date.
+    """
 
     text = question.lower().strip()
 
@@ -219,7 +242,9 @@ if not st.session_state.logged_in:
 
     with login_tab:
 
-        st.subheader("Welcome back")
+        st.subheader(
+            "Welcome back"
+        )
 
         username = st.text_input(
             "Username",
@@ -260,6 +285,7 @@ if not st.session_state.logged_in:
                     st.session_state.pdf_documents = []
                     st.session_state.active_pdf_id = None
                     st.session_state.active_chat_id = None
+                    st.session_state.last_voice_hash = None
 
                     st.rerun()
 
@@ -471,6 +497,8 @@ with st.sidebar:
 
         st.session_state.messages = []
 
+        st.session_state.last_voice_hash = None
+
         st.rerun()
 
     st.divider()
@@ -479,7 +507,9 @@ with st.sidebar:
     # CHAT HISTORY
     # ========================================================
 
-    st.caption("Chats")
+    st.caption(
+        "Chats"
+    )
 
     chat_sessions = get_chat_sessions(
         user["id"]
@@ -517,6 +547,8 @@ with st.sidebar:
                 )
             )
 
+            st.session_state.last_voice_hash = None
+
             st.rerun()
 
     # ========================================================
@@ -527,7 +559,9 @@ with st.sidebar:
 
         st.divider()
 
-        st.caption("Documents")
+        st.caption(
+            "Documents"
+        )
 
         pdf_options = {}
 
@@ -549,7 +583,7 @@ with st.sidebar:
         )
 
         # ----------------------------------------------------
-        # Find currently active document
+        # Find active document
         # ----------------------------------------------------
 
         current_index = 0
@@ -676,7 +710,9 @@ with st.sidebar:
                         "Document deletion failed."
                     )
 
-                    st.exception(error)
+                    st.exception(
+                        error
+                    )
 
     # ========================================================
     # LOGOUT
@@ -695,6 +731,7 @@ with st.sidebar:
         st.session_state.pdf_documents = []
         st.session_state.active_pdf_id = None
         st.session_state.pdf_loaded_for_user = None
+        st.session_state.last_voice_hash = None
 
         st.rerun()
 
@@ -778,6 +815,399 @@ for message in st.session_state.messages:
 
         st.markdown(
             content
+        )
+
+
+# ============================================================
+# VOICE INPUT
+# ============================================================
+
+st.divider()
+
+st.subheader(
+    "🎙️ Talk to NOVA"
+)
+
+st.caption(
+    "Speak naturally in your preferred language."
+)
+
+voice_audio = st.audio_input(
+    "Record your message",
+    sample_rate=16000,
+)
+
+
+# ============================================================
+# VOICE SUBMISSION
+# ============================================================
+
+if voice_audio:
+
+    try:
+
+        # ----------------------------------------------------
+        # READ AUDIO BYTES
+        # ----------------------------------------------------
+
+        audio_bytes = voice_audio.getvalue()
+
+        if not audio_bytes:
+
+            st.error(
+                "No audio was received. Please try again."
+            )
+
+            st.stop()
+
+        # ----------------------------------------------------
+        # DUPLICATE SUBMISSION PROTECTION
+        # ----------------------------------------------------
+
+        audio_hash = hashlib.sha256(
+            audio_bytes
+        ).hexdigest()
+
+        if (
+            audio_hash
+            == st.session_state.last_voice_hash
+        ):
+
+            st.stop()
+
+        st.session_state.last_voice_hash = (
+            audio_hash
+        )
+
+        # ----------------------------------------------------
+        # READ WAV DIRECTLY
+        #
+        # Streamlit audio_input returns WAV audio.
+        # No FFmpeg / ffprobe / pydub required.
+        # ----------------------------------------------------
+
+        with st.spinner(
+            "Preparing your voice message..."
+        ):
+
+            audio_buffer = io.BytesIO(
+                audio_bytes
+            )
+
+            with wave.open(
+                audio_buffer,
+                "rb",
+            ) as wav_file:
+
+                channels = (
+                    wav_file.getnchannels()
+                )
+
+                sample_width = (
+                    wav_file.getsampwidth()
+                )
+
+                sample_rate = (
+                    wav_file.getframerate()
+                )
+
+                pcm_data = (
+                    wav_file.readframes(
+                        wav_file.getnframes()
+                    )
+                )
+
+        # ----------------------------------------------------
+        # VALIDATE AUDIO FORMAT
+        #
+        # Gemini Live expects:
+        #
+        # Channels      = 1
+        # Sample width  = 16-bit
+        # Sample rate   = 16000 Hz
+        # ----------------------------------------------------
+
+        if channels != 1:
+
+            st.error(
+                "Voice recording must be mono audio."
+            )
+
+            st.stop()
+
+        if sample_rate != 16000:
+
+            st.error(
+                "Voice recording must use a 16 kHz sample rate."
+            )
+
+            st.stop()
+
+        if sample_width != 2:
+
+            st.error(
+                "Voice recording must use 16-bit PCM audio."
+            )
+
+            st.stop()
+
+        if not pcm_data:
+
+            st.error(
+                "The recorded audio is empty."
+            )
+
+            st.stop()
+
+        # ----------------------------------------------------
+        # CREATE UNIQUE OUTPUT FILE
+        # ----------------------------------------------------
+
+        output_file = os.path.join(
+            tempfile.gettempdir(),
+            f"nova_voice_{audio_hash[:16]}.wav",
+        )
+
+        # ----------------------------------------------------
+        # COMPLETE VOICE PIPELINE
+        #
+        # Audio
+        #   ↓
+        # Speech-to-Text
+        #   ↓
+        # NOVA Answer Engine
+        #   ↓
+        # Text-to-Speech
+        #   ↓
+        # Voice Audio
+        # ----------------------------------------------------
+
+        with st.spinner(
+            "NOVA is listening and thinking..."
+        ):
+
+            result = asyncio.run(
+                process_voice(
+                    pcm_data=pcm_data,
+                    user_id=user["id"],
+                    chat_messages=st.session_state.messages,
+                    active_pdf_id=st.session_state.active_pdf_id,
+                    output_file=output_file,
+                )
+            )
+
+        # ----------------------------------------------------
+        # READ RESULT
+        # ----------------------------------------------------
+
+        transcript = result.get(
+            "transcript",
+            "",
+        ).strip()
+
+        answer = result.get(
+            "answer",
+            "",
+        )
+
+        route = result.get(
+            "route",
+            "GENERAL",
+        )
+
+        web_sources = result.get(
+            "web_sources",
+            [],
+        )
+
+        audio_file = result.get(
+            "audio_file"
+        )
+
+        # ----------------------------------------------------
+        # EMPTY TRANSCRIPT
+        # ----------------------------------------------------
+
+        if not transcript:
+
+            st.warning(
+                "I couldn't understand the audio. "
+                "Please try speaking again."
+            )
+
+            st.stop()
+
+        # ----------------------------------------------------
+        # USER VOICE MESSAGE
+        # ----------------------------------------------------
+
+        with st.chat_message(
+            "user"
+        ):
+
+            st.markdown(
+                transcript
+            )
+
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": transcript,
+            }
+        )
+
+        save_chat_message(
+            st.session_state.active_chat_id,
+            "user",
+            transcript,
+        )
+
+        # ----------------------------------------------------
+        # ASSISTANT RESPONSE
+        # ----------------------------------------------------
+
+        with st.chat_message(
+            "assistant"
+        ):
+
+            st.markdown(
+                answer
+            )
+
+            # ------------------------------------------------
+            # ROUTE
+            # ------------------------------------------------
+
+            st.caption(
+                f"Route: {route}"
+            )
+
+            # ------------------------------------------------
+            # WEB SOURCES
+            # ------------------------------------------------
+
+            if web_sources:
+
+                st.divider()
+
+                st.caption(
+                    "Sources"
+                )
+
+                for source in web_sources:
+
+                    title = source.get(
+                        "title",
+                        "Source",
+                    )
+
+                    url = source.get(
+                        "url",
+                        "",
+                    )
+
+                    if url:
+
+                        st.markdown(
+                            f"- [{title}]({url})"
+                        )
+
+            # ------------------------------------------------
+            # VOICE RESPONSE
+            # ------------------------------------------------
+
+            if (
+                audio_file
+                and os.path.exists(audio_file)
+            ):
+
+                st.audio(
+                    audio_file,
+                    format="audio/wav",
+                )
+
+        # ----------------------------------------------------
+        # SAVE MEMORY
+        # ----------------------------------------------------
+
+        detected_memory = detect_memory(
+            transcript
+        )
+
+        if detected_memory:
+
+            save_memory(
+                user["id"],
+                detected_memory,
+            )
+
+        # ----------------------------------------------------
+        # SAVE ASSISTANT MESSAGE
+        # ----------------------------------------------------
+
+        save_chat_message(
+            st.session_state.active_chat_id,
+            "assistant",
+            answer,
+        )
+
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+            }
+        )
+
+        # ----------------------------------------------------
+        # AUTOMATIC CHAT TITLE
+        # ----------------------------------------------------
+
+        current_title = "New Chat"
+
+        for chat in get_chat_sessions(
+            user["id"]
+        ):
+
+            if (
+                chat[0]
+                == st.session_state.active_chat_id
+            ):
+
+                current_title = chat[1]
+                break
+
+        if current_title == "New Chat":
+
+            title = transcript[:40]
+
+            if len(transcript) > 40:
+
+                title += "..."
+
+            update_chat_title(
+                st.session_state.active_chat_id,
+                title,
+            )
+
+    except wave.Error:
+
+        st.session_state.last_voice_hash = None
+
+        st.error(
+            "The recorded audio format could not be read. "
+            "Please record again."
+        )
+
+    except Exception as error:
+
+        st.session_state.last_voice_hash = None
+
+        st.error(
+            "Voice processing failed."
+        )
+
+        st.exception(
+            error
         )
 
 
@@ -950,7 +1380,9 @@ if chat_input:
                         "Document processing failed."
                     )
 
-                    st.exception(error)
+                    st.exception(
+                        error
+                    )
 
     # ========================================================
     # NO QUESTION + FILES
@@ -993,7 +1425,7 @@ if chat_input:
         st.stop()
 
     # ========================================================
-    # IF UPLOAD FAILED BUT QUESTION EXISTS
+    # UPLOAD FAILED + QUESTION
     # ========================================================
 
     if (
@@ -1029,7 +1461,9 @@ if chat_input:
     # DISPLAY USER MESSAGE
     # ========================================================
 
-    with st.chat_message("user"):
+    with st.chat_message(
+        "user"
+    ):
 
         st.markdown(
             question
@@ -1043,7 +1477,9 @@ if chat_input:
     web_sources = []
     route = "GENERAL"
 
-    with st.chat_message("assistant"):
+    with st.chat_message(
+        "assistant"
+    ):
 
         with st.spinner(
             "Thinking..."
@@ -1110,10 +1546,54 @@ if chat_input:
 
                         else:
 
-                            answer = (
-                                "Please upload a PDF first "
-                                "or select an uploaded document "
-                                "from the sidebar."
+                            # -------------------------------------
+                            # Professional fallback:
+                            # If PDF is requested but no PDF exists,
+                            # use the normal LLM instead of returning
+                            # an artificial PDF-only message.
+                            # -------------------------------------
+
+                            llm = get_llm()
+
+                            prompt = create_chat_prompt()
+
+                            chain = prompt | llm
+
+                            chat_history = (
+                                build_chat_history(
+                                    st.session_state.messages[
+                                        :-1
+                                    ]
+                                )
+                            )
+
+                            memories = get_memories(
+                                user["id"]
+                            )
+
+                            if memories:
+
+                                memory_text = "\n".join(
+                                    f"- {memory}"
+                                    for memory in memories
+                                )
+
+                            else:
+
+                                memory_text = (
+                                    "No saved memories."
+                                )
+
+                            response = chain.invoke(
+                                {
+                                    "memories": memory_text,
+                                    "chat_history": chat_history,
+                                    "question": question,
+                                }
+                            )
+
+                            answer = get_response_text(
+                                response
                             )
 
                             route = "GENERAL"
@@ -1188,15 +1668,9 @@ if chat_input:
 
                         response = chain.invoke(
                             {
-                                "memories": (
-                                    memory_text
-                                ),
-                                "chat_history": (
-                                    chat_history
-                                ),
-                                "question": (
-                                    question
-                                ),
+                                "memories": memory_text,
+                                "chat_history": chat_history,
+                                "question": question,
                             }
                         )
 
